@@ -1,0 +1,101 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- User Profile Rules ---
+    function isValidUser(data) {
+      return data.uid == request.auth.uid 
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.email is string && data.email.size() <= 150
+        && data.role in ['student', 'tutor']
+        && (data.get('bio', '') is string && data.get('bio', '').size() <= 1000);
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || request.query.limit <= 20); // Allow searching/listing users but restricted
+      allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().createdAt == request.time;
+      allow update: if isOwner(userId) && isValidUser(incoming()) 
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'photoUrl', 'bio', 'updatedAt'])
+        && incoming().updatedAt == request.time;
+    }
+
+    // --- Tutor Profile Rules ---
+    function isValidTutor(data) {
+      return data.uid == request.auth.uid
+        && data.expertise is list && data.expertise.size() > 0 && data.expertise.size() <= 20
+        && data.rates is number && data.rates >= 0
+        && data.tutoringMode in ['online', 'in-person', 'both'];
+    }
+
+    match /tutor_profiles/{userId} {
+      allow read: if true; // Publicly readable
+      allow create: if isOwner(userId) && isValidTutor(incoming());
+      allow update: if isOwner(userId) && isValidTutor(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly(['expertise', 'rates', 'education', 'certifications', 'location', 'tutoringMode', 'availability', 'updatedAt'])
+        && incoming().updatedAt == request.time;
+    }
+
+    // --- Booking Rules ---
+    function isValidBooking(data) {
+      return data.studentId == request.auth.uid
+        && isValidId(data.tutorId)
+        && data.status in ['pending', 'confirmed', 'completed', 'cancelled']
+        && data.price is number;
+    }
+
+    match /bookings/{bookingId} {
+      allow get: if isSignedIn() && (resource.data.studentId == request.auth.uid || resource.data.tutorId == request.auth.uid);
+      allow list: if isSignedIn() && (resource.data.studentId == request.auth.uid || resource.data.tutorId == request.auth.uid);
+      allow create: if isSignedIn() && isValidBooking(incoming()) && incoming().createdAt == request.time;
+      allow update: if isSignedIn() && (
+        // Action: Confirm/Complete (Tutor)
+        (isOwner(existing().tutorId) && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+        // Action: Cancel (Student)
+        (isOwner(existing().studentId) && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+      ) && incoming().updatedAt == request.time;
+    }
+
+    // --- Chat Rules ---
+    match /chat_rooms/{roomId} {
+      allow read: if isSignedIn() && request.auth.uid in resource.data.participantIds;
+      allow create: if isSignedIn() && request.auth.uid in incoming().participantIds && incoming().participantIds.size() == 2;
+      allow update: if isSignedIn() && request.auth.uid in existing().participantIds 
+        && incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'updatedAt']);
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chat_rooms/$(roomId)).data.participantIds;
+        allow create: if isSignedIn() 
+          && request.auth.uid == incoming().senderId
+          && request.auth.uid in get(/databases/$(database)/documents/chat_rooms/$(roomId)).data.participantIds
+          && incoming().timestamp == request.time;
+      }
+    }
+  }
+}

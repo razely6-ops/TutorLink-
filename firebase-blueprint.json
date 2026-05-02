@@ -1,0 +1,84 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Base user profile for both students and tutors.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique ID of the user." },
+        "name": { "type": "string", "description": "Display name of the user." },
+        "email": { "type": "string", "format": "email", "description": "User's email address." },
+        "role": { "type": "string", "enum": ["student", "tutor"], "description": "The user's role." },
+        "photoUrl": { "type": "string", "description": "Profile picture URL." },
+        "bio": { "type": "string", "description": "Short biography." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "email", "role"]
+    },
+    "TutorProfile": {
+      "title": "Tutor Profile",
+      "description": "Extended profile details for tutors.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Matches User UID." },
+        "expertise": { "type": "array", "items": { "type": "string" }, "description": "List of subjects." },
+        "rates": { "type": "number", "description": "Hourly rate in local currency." },
+        "education": { "type": "string", "description": "Education background." },
+        "certifications": { "type": "array", "items": { "type": "string" } },
+        "location": { "type": "string", "description": "Geographic location or 'Online'." },
+        "tutoringMode": { "type": "string", "enum": ["online", "in-person", "both"] },
+        "availability": { "type": "object", "description": "Weekly schedule." },
+        "rating": { "type": "number", "description": "Average rating from 1 to 5." },
+        "reviewsCount": { "type": "integer", "description": "Total number of reviews." },
+        "isFeatured": { "type": "boolean", "description": "Whether the tutor is promoted." }
+      },
+      "required": ["uid", "expertise", "rates"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "A scheduled tutoring session.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string", "description": "UID of the student." },
+        "tutorId": { "type": "string", "description": "UID of the tutor." },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "completed", "cancelled"] },
+        "sessionDate": { "type": "string", "format": "date-time" },
+        "subject": { "type": "string" },
+        "price": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["studentId", "tutorId", "status", "sessionDate", "subject"]
+    },
+    "ChatRoom": {
+      "title": "Chat Room",
+      "description": "A private conversation between two users.",
+      "type": "object",
+      "properties": {
+        "participantIds": { "type": "array", "items": { "type": "string" }, "description": "UIDs of the two participants." },
+        "lastMessage": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["participantIds"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "An individual message in a chat room.",
+      "type": "object",
+      "properties": {
+        "chatRoomId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["chatRoomId", "senderId", "text", "timestamp"]
+    }
+  },
+  "firestore": {
+    "users": { "schema": "User", "description": "Collection of user profiles." },
+    "tutor_profiles": { "schema": "TutorProfile", "description": "Collection of detailed tutor information." },
+    "bookings": { "schema": "Booking", "description": "Collection of session bookings." },
+    "chat_rooms": { "schema": "ChatRoom", "description": "Collection of active chat rooms." },
+    "chat_rooms/{roomId}/messages": { "schema": "Message", "description": "Subcollection of messages per chat room." }
+  }
+}
